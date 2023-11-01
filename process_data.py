@@ -3,11 +3,11 @@ import numpy as np
 import polars as pl
 import polars.selectors as cs
 from iterstrat.ml_stratifiers import MultilabelStratifiedKFold
+from lingua import Language, LanguageDetectorBuilder
 from polars import col as c
 
 # %%
-# all_comments_lang is all_DEFR_comments_27062022 with lang labels generated with langdetect
-path = "data/all_comments_lang.csv"
+path = "data/all_DEFR_comments_27062022.csv"
 df = pl.read_csv(path, dtypes={"ArticleID": pl.Utf8, "ID": pl.Utf8})
 
 
@@ -17,15 +17,14 @@ def implies(a, b):
 
 
 df = (
-    df.drop_nulls()
-    .unique()
-    .filter(c("lang") != "fr")
-    .drop("ArticleID", "ID", "kommentar_original", "toxische_sprache", "lang")
-    # Remove the french comments (not 100% accurate by good approximation)
+    df.drop_nulls().unique()
+    # Drop unnecessary columns
+    .drop("ArticleID", "ID", "kommentar", "toxische_sprache")
     # Standardize column names
     .rename(
         {
-            "kommentar": "comment",
+            # Note that we use the original comments, not the preprocessed ones
+            "kommentar_original": "comment",
             "geschlecht": "gender",
             "alter": "age",
             "sexualitaet": "sexuality",
@@ -77,14 +76,30 @@ assert (
 )
 
 # %%
-# Split data into train, eval, test
+LANGUAGES = [Language.ENGLISH, Language.FRENCH, Language.GERMAN, Language.ITALIAN]
+DETECTOR = LanguageDetectorBuilder.from_languages(*LANGUAGES).build()
 
-# The order is chosen based on the dataset
-# Combinations of 4 labels or more all have <100 occurrences in the 300k examples
-# Thus, we deem these not critically important
-ORDER = 3
+
+def detect_language(comment):
+    lang = DETECTOR.detect_language_of(comment)
+    return lang.name if lang is not None else "UKNOWN"
+
+
+with open("data/language_list.csv", "w") as f:
+    f.write("language\n")
+    for i, comment in enumerate(df["comment"]):
+        if i % 10000 == 0:
+            print(i)
+        f.write(detect_language(comment) + "\n")
+
+# %%
+language_df = pl.read_csv("data/language_list.csv")
+df = df.with_columns(language=language_df["language"]).filter(c("language") == "GERMAN")
+
+
+# %%
+# Split data into train, eval, test
 SEED = 42
-RATIOS = [0.75, 0.15, 0.1]
 
 # Randomly split to 20 folds, one fold is thus 5% of the data
 stratifier = MultilabelStratifiedKFold(20, shuffle=True, random_state=SEED)
@@ -136,10 +151,11 @@ def check_ratio(data: pl.DataFrame, labels: list[str]):
 
 
 # %%
-# Bump v1 to some other version if we do any changes to the code
-
-VERSION = 1
+# Bump VERSION if we do any changes to the code
+VERSION = 2
 df.write_csv(f"data/processed_comments_all_v{VERSION}.csv")
 train_data.write_csv(f"data/processed_comments_train_v{VERSION}.csv")
 evaluation_data.write_csv(f"data/processed_comments_evaluation_v{VERSION}.csv")
 test_data.write_csv(f"data/processed_comments_test_v{VERSION}.csv")
+
+# %%
