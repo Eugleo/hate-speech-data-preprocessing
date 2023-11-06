@@ -16,15 +16,20 @@ def implies(a, b):
     return (c(a) == 0) | (c(b) == 1)
 
 
+non_target_columns = ["toxic", "comment", "id", "lang", "comment_preprocessed_legacy"]
+
 df = (
-    df.drop_nulls().unique()
+    df.with_row_count("id")
+    .drop_nulls()
+    .unique(cs.all().exclude("id"))
     # Drop unnecessary columns
-    .drop("ArticleID", "ID", "kommentar", "toxische_sprache")
+    .drop("ArticleID", "ID", "toxische_sprache")
     # Standardize column names
     .rename(
         {
             # Note that we use the original comments, not the preprocessed ones
             "kommentar_original": "comment",
+            "kommentar": "comment_preprocessed_legacy",
             "geschlecht": "gender",
             "alter": "age",
             "sexualitaet": "sexuality",
@@ -39,15 +44,12 @@ df = (
     # Fix the toxicity labels
     .rename({"label": "toxic"})
     # Create a new column to indicate if the toxicity is targeted (number of targets > 0)
-    .with_columns(
-        targeted=pl.sum_horizontal(cs.all().exclude(["toxic", "comment"])) > 0
-    )
+    .with_columns(targeted=pl.sum_horizontal(cs.all().exclude(non_target_columns)) > 0)
     # Enforce label consistency (toxic is superset of targeted)
     .filter(implies("targeted", "toxic"))
     # Cast all the yes/no variables to long
     .cast({cs.numeric(): pl.Int64, cs.boolean(): pl.Int64})
     # Add a column with the row id
-    .with_row_count("id")
 )
 
 
@@ -152,7 +154,7 @@ def check_ratio(data: pl.DataFrame, labels: list[str]):
 
 # %%
 # Bump VERSION if we do any changes to the code
-VERSION = 2
+VERSION = 3
 df.write_csv(f"data/processed_comments_all_v{VERSION}.csv")
 train_data.write_csv(f"data/processed_comments_train_v{VERSION}.csv")
 evaluation_data.write_csv(f"data/processed_comments_evaluation_v{VERSION}.csv")
