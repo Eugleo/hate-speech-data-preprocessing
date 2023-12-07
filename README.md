@@ -17,7 +17,7 @@ The code generates multiple different data splits, some of them hierarchical. Se
   - `training_main` contains 85% of `full_main` and is intended for training and hyperparameter tuning
   - `evaluation_main` contains 15% of `full_main` and is intended for hyperparameter tuning and model comparison with other teams. You shouldn't optimize too hard for this set to prevent over-inflating your scores and keep the comparison with other teams realistic.
 
-Finally, `everything` literally contains everything — all languages and all comments, including the expert and representative evaluation sets. It
+Finally, `everything` literally contains everything — all languages and all comments, including the expert and representative evaluation sets.
 
 ## Making changes
 
